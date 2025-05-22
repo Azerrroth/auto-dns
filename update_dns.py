@@ -2,6 +2,7 @@
 import os
 import json
 import socket
+import logging
 import requests
 from aliyunsdkcore.client import AcsClient
 from aliyunsdkcore.acs_exception.exceptions import ClientException, ServerException
@@ -39,34 +40,55 @@ def get_record_id(client, domain_name, rr):
                 if record['RR'] == rr and record['Type'] == 'AAAA':
                     return record['RecordId']
         
-        print(f"未找到域名 {rr}.{domain_name} 的AAAA记录")
+        logging.warning(f"未找到域名 {rr}.{domain_name} 的AAAA记录")
         return None
     except (ClientException, ServerException) as e:
-        print(f"查询域名记录失败: {e}")
+        logging.error(f"查询域名记录失败: {e}")
         return None
     except json.JSONDecodeError as e:
-        print(f"解析响应失败: {e}")
+        logging.error(f"解析响应失败: {e}")
         return None
 
 def get_ipv6():
     """获取本机的IPv6地址"""
+    # 首先尝试从 api6.ipify.org 获取 IPv6 地址
+    try:
+        logging.info("尝试从 https://api6.ipify.org 获取 IPv6 地址...")
+        # Bypass system proxies to get the actual public IP
+        response = requests.get('https://api6.ipify.org', proxies={'http': None, 'https': None}, timeout=5)
+        response.raise_for_status()  # 如果请求失败则引发 HTTPError 异常
+        ipv6_address = response.text.strip()
+        # 简单验证是否是有效的 IPv6 地址 (可以根据需要添加更严格的验证)
+        if ':' in ipv6_address and '.' not in ipv6_address: # 基本的IPv6格式检查
+            logging.info(f"通过 API 获取到 IPv6 地址: {ipv6_address}")
+            return ipv6_address
+        else:
+            logging.warning(f"从 API 获取到的内容不是有效的 IPv6 地址: {ipv6_address}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"通过 API 获取 IPv6 地址失败: {e}")
+    except Exception as e:
+        logging.error(f"处理 API 响应时发生未知错误: {e}")
+
+    # 如果 API 调用失败或未返回有效 IPv6 地址，则回退到本地接口方法
+    logging.info("API 调用失败或未返回有效 IPv6, 尝试从本地网络接口获取...")
     try:
         # 获取所有网络接口
         interfaces = socket.getaddrinfo(socket.gethostname(), None)
         
         # 遍历所有接口，查找IPv6地址
         for interface in interfaces:
-            # interface[0] 是地址族，10 表示 IPv6
+            # interface[0] 是地址族，AF_INET6 表示 IPv6
             if interface[0] == socket.AF_INET6:
                 ipv6 = interface[4][0]
                 # 过滤掉本地回环地址和链路本地地址
                 if not ipv6.startswith('::1') and not ipv6.startswith('fe80:'):
+                    logging.info(f"通过本地接口获取到 IPv6 地址: {ipv6}")
                     return ipv6
                     
-        print("未找到有效的IPv6地址")
+        logging.warning("本地接口未找到有效的IPv6地址")
         return None
     except Exception as e:
-        print(f"获取IPv6地址失败: {e}")
+        logging.error(f"通过本地接口获取IPv6地址失败: {e}")
         return None
 
 def update_dns_record(client, record_id, ipv6):
@@ -87,34 +109,49 @@ def update_dns_record(client, record_id, ipv6):
         request.set_Line(LINE)  # 设置解析线路
         request.set_Lang(LANG)  # 设置语言
 
-        print("请求参数:", request._params)
+        logging.debug(f"请求参数: {request._params}")
         
         # 发起API请求
         response = client.do_action_with_exception(request)
         response_json = json.loads(response.decode('utf-8'))
         
         if response_json.get('RequestId'):
-            print(f"DNS更新成功！")
-            print(f"RequestId: {response_json['RequestId']}")
-            print(f"RecordId: {response_json['RecordId']}")
+            logging.info(f"DNS更新成功！ RequestId: {response_json['RequestId']}, RecordId: {response_json['RecordId']}")
             return True
         else:
-            print("DNS更新失败：未收到有效的响应")
+            logging.error("DNS更新失败：未收到有效的响应")
             return False
             
     except (ClientException, ServerException) as e:
-        print(f"更新DNS记录失败: {e}")
+        logging.error(f"更新DNS记录失败: {e}")
         return False
     except json.JSONDecodeError as e:
-        print(f"解析响应失败: {e}")
+        logging.error(f"解析响应失败: {e}")
         return False
 
 def main():
+    # 配置日志记录
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # 创建一个 Formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+
+    # 创建一个 FileHandler，用于写入日志文件
+    file_handler = logging.FileHandler('update_dns.log')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # 创建一个 StreamHandler，用于输出到控制台
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
     # 检查必要的环境变量
     required_vars = ['ALIYUN_ACCESS_KEY_ID', 'ALIYUN_ACCESS_KEY_SECRET', 'DOMAIN_NAME', 'RR']
     missing_vars = [var for var in required_vars if not os.getenv(var)]
     if missing_vars:
-        print(f"缺少必要的环境变量: {', '.join(missing_vars)}")
+        logging.error(f"缺少必要的环境变量: {', '.join(missing_vars)}")
         return
 
     # 创建AcsClient实例
@@ -123,18 +160,18 @@ def main():
     # 获取记录ID
     record_id = get_record_id(client, DOMAIN_NAME, RR)
     if not record_id:
-        print("无法获取记录ID，请检查域名和RR配置是否正确")
+        logging.error("无法获取记录ID，请检查域名和RR配置是否正确")
         return
 
     # 获取IPv6地址
     ipv6 = get_ipv6()
     if not ipv6:
-        print("无法获取IPv6地址")
+        logging.error("无法获取IPv6地址")
         return
 
-    print(f"当前IPv6地址: {ipv6}")
-    print(f"TTL: {TTL}秒")
-    print(f"解析线路: {LINE}")
+    logging.info(f"当前IPv6地址: {ipv6}")
+    logging.info(f"TTL: {TTL}秒")
+    logging.info(f"解析线路: {LINE}")
     
     # 更新DNS记录
     update_dns_record(client, record_id, ipv6)
