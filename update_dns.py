@@ -54,7 +54,8 @@ def get_ipv6():
     # 首先尝试从 api6.ipify.org 获取 IPv6 地址
     try:
         logging.info("尝试从 https://api6.ipify.org 获取 IPv6 地址...")
-        response = requests.get('https://api6.ipify.org', timeout=5)
+        # Bypass system proxies to get the actual public IP
+        response = requests.get('https://api6.ipify.org', proxies={'http': None, 'https': None}, timeout=5)
         response.raise_for_status()  # 如果请求失败则引发 HTTPError 异常
         ipv6_address = response.text.strip()
         # 简单验证是否是有效的 IPv6 地址 (可以根据需要添加更严格的验证)
