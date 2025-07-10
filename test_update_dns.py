@@ -187,9 +187,14 @@ class TestRetryMechanism(unittest.TestCase):
 class TestIPv6Services(unittest.TestCase):
     """测试IPv6服务获取"""
     
+    @patch.dict(os.environ, {'SKIP_PROXY': 'false'}, clear=False)
     @patch('update_dns.requests.get')
     def test_get_ipv6_from_service_success(self, mock_get):
         """测试从服务成功获取IPv6"""
+        # 重新加载模块以获取新的环境变量
+        import importlib
+        importlib.reload(update_dns)
+        
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = '2001:db8::1'
@@ -198,6 +203,9 @@ class TestIPv6Services(unittest.TestCase):
         
         result = update_dns.get_ipv6_from_service('https://test.service')
         self.assertEqual(result, '2001:db8::1')
+        
+        # 验证默认情况下不跳过代理
+        mock_get.assert_called_with('https://test.service', timeout=10, proxies=None)
     
     @patch('update_dns.requests.get')
     def test_get_ipv6_from_service_json_response(self, mock_get):
@@ -218,6 +226,26 @@ class TestIPv6Services(unittest.TestCase):
         
         result = update_dns.get_ipv6_from_service('https://test.service')
         self.assertIsNone(result)
+    
+    @patch.dict(os.environ, {'SKIP_PROXY': 'true'})
+    @patch('update_dns.requests.get')
+    def test_get_ipv6_from_service_skip_proxy(self, mock_get):
+        """测试跳过代理获取IPv6"""
+        # 重新加载模块以获取新的环境变量
+        import importlib
+        importlib.reload(update_dns)
+        
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = '2001:db8::1'
+        mock_response.raise_for_status.return_value = None
+        mock_get.return_value = mock_response
+        
+        result = update_dns.get_ipv6_from_service('https://test.service')
+        self.assertEqual(result, '2001:db8::1')
+        
+        # 验证跳过代理时传递空的proxies字典
+        mock_get.assert_called_with('https://test.service', timeout=10, proxies={})
 
 if __name__ == '__main__':
     # 设置日志级别以减少测试输出

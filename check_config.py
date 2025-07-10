@@ -35,7 +35,8 @@ def check_environment_variables():
         'REGION': os.getenv('REGION', 'cn-hangzhou'),
         'MAX_RETRIES': os.getenv('MAX_RETRIES', '3'),
         'RETRY_DELAY': os.getenv('RETRY_DELAY', '5'),
-        'VERIFY_DNS_UPDATE': os.getenv('VERIFY_DNS_UPDATE', 'false')
+        'VERIFY_DNS_UPDATE': os.getenv('VERIFY_DNS_UPDATE', 'false'),
+        'SKIP_PROXY': os.getenv('SKIP_PROXY', 'false')
     }
     
     all_good = True
@@ -67,9 +68,12 @@ def check_network_connectivity():
     ]
     
     ipv6_working = False
+    skip_proxy = os.getenv('SKIP_PROXY', 'false').lower() == 'true'
+    proxies = {} if skip_proxy else None
+    
     for service in ipv6_services:
         try:
-            response = requests.get(service, timeout=10)
+            response = requests.get(service, timeout=10, proxies=proxies)
             if response.status_code == 200:
                 ipv6 = response.text.strip()
                 if is_valid_ipv6(ipv6):

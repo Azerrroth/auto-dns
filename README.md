@@ -59,6 +59,7 @@ cp .env.example .env
 - `MAX_RETRIES`: 最大重试次数，默认为3
 - `RETRY_DELAY`: 重试延迟秒数，默认为5
 - `VERIFY_DNS_UPDATE`: 是否验证DNS更新，默认为false
+- `SKIP_PROXY`: 是否跳过系统代理，默认为false
 
 ### 4. 验证配置
 运行配置检查脚本：
@@ -135,6 +136,7 @@ python check_config.py
    - `unicom`: 联通线路
    - `mobile`: 移动线路
    - `oversea`: 海外线路
+6. **代理设置**: 如果系统配置了代理但代理不支持IPv6，设置 `SKIP_PROXY=true` 跳过代理
 
 ## 🔧 故障排除
 
@@ -144,6 +146,7 @@ python check_config.py
 - 检查网络是否支持IPv6
 - 尝试访问 https://test-ipv6.com/ 测试IPv6连通性
 - 检查防火墙设置
+- 如果使用了系统代理，尝试设置 `SKIP_PROXY=true` 跳过代理
 
 #### 2. 阿里云API调用失败
 - 验证访问密钥是否正确

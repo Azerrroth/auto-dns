@@ -28,6 +28,8 @@ LANG = os.getenv('LANG', 'zh')  # 语言，默认zh
 REGION = os.getenv('REGION', 'cn-hangzhou')  # 阿里云区域，默认杭州
 MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))  # 最大重试次数
 RETRY_DELAY = int(os.getenv('RETRY_DELAY', '5'))  # 重试延迟秒数
+VERIFY_DNS_UPDATE = os.getenv('VERIFY_DNS_UPDATE', 'false').lower() == 'true'  # 是否验证DNS更新
+SKIP_PROXY = os.getenv('SKIP_PROXY', 'false').lower() == 'true'  # 是否跳过系统代理
 
 # IPv6检测服务列表（按优先级排序）
 IPV6_SERVICES = [
@@ -120,7 +122,9 @@ def save_cached_ipv6(ipv6):
 def get_ipv6_from_service(service_url, timeout=10):
     """从指定服务获取IPv6地址"""
     try:
-        response = requests.get(service_url, timeout=timeout)
+        # 根据配置决定是否跳过代理
+        proxies = {} if SKIP_PROXY else None
+        response = requests.get(service_url, timeout=timeout, proxies=proxies)
         response.raise_for_status()
         
         # 处理不同服务的响应格式
