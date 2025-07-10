@@ -1,0 +1,74 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+    
+    - name: Run configuration check
+      run: |
+        # 设置最小配置以通过基本检查
+        export ALIYUN_ACCESS_KEY_ID=test_key_id
+        export ALIYUN_ACCESS_KEY_SECRET=test_key_secret
+        export DOMAIN_NAME=example.com
+        export RR=test
+        python check_config.py || true  # 允许失败，因为没有真实凭证
+    
+    - name: Run tests
+      run: |
+        python -m pytest test_update_dns.py -v --cov=update_dns --cov-report=xml
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort
+    
+    - name: Run black
+      run: black --check --diff .
+    
+    - name: Run isort
+      run: isort --check-only --diff .
+    
+    - name: Run flake8
+      run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
